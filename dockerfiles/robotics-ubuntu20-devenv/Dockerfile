@@ -46,6 +46,10 @@ RUN curl http://robotpkg.openrobots.org/packages/debian/robotpkg.key | sudo apt-
 RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
     robotpkg-py38-pinocchio robotpkg-py38-example-robot-data
 
+### Franka driver
+RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
+    ros-noetic-libfranka ros-noetic-franka-ros
+
 #################### Development tools ######################
 
 # install emacs
