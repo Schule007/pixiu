@@ -91,7 +91,8 @@ export PYTHONPATH=/opt/openrobots/lib/python3.8/site-packages:$PYTHONPATH\n\
 export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH\n\
 \n\
 rossetup () {\n\
-    source /opt/ros/noetic/setup.bash  # Note that the catkin ws setup is not included here\n\
+    source /opt/ros/noetic/setup.bash\n\
+    [ -f "$HOME/catkin_ws/devel/setup.bash" ] && source "$HOME/catkin_ws/devel/setup.bash"\n\
 }\n\
 \n\
 activate-venv () {\n\
