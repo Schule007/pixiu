@@ -46,9 +46,25 @@ RUN curl http://robotpkg.openrobots.org/packages/debian/robotpkg.key | sudo apt-
 RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
     robotpkg-py38-pinocchio robotpkg-py38-example-robot-data
 
-### Franka driver
-RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
-    ros-noetic-libfranka ros-noetic-franka-ros
+### Franka driver 0.7.1, corresponding to firmware version 3
+# Firmware version 4 can install ros-noetic-libfranka and ros-noetic-franka-ros directly
+RUN sudo apt install -qqy --no-install-recommends build-essential cmake git libpoco-dev libeigen3-dev
+RUN git clone --recursive https://github.com/frankaemika/libfranka ${home}/from_src/libfranka
+RUN cd ${home}/from_src/libfranka &&\
+    git checkout 0.7.1 &&\
+    git submodule update &&\
+    mkdir build &&\
+    cd build &&\
+    cmake -DCMAKE_BUILD_TYPE=Release .. &&\
+    cmake --build . &&\
+    cpack -G DEB &&\
+    sudo dpkg -i libfranka-0.7.1-amd64.deb
+# Then build franka-ros from source using catkin
+# https://github.com/frankaemika/franka_ros
+
+### ROS control and its friends
+RUN sudo apt-get install -qqy --no-install-recommends\
+    ros-noetic-ros-control ros-noetic-ros-controllers
 
 #################### Development tools ######################
 
