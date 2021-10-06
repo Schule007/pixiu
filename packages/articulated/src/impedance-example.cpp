@@ -9,7 +9,14 @@
 #include <franka/exception.h>
 #include <franka/model.h>
 #include <franka/robot.h>
+#include <time.h>
 #include "examples_common.h"
+
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include "articulated/ReducedFrankaState.h"
+#include <realtime_tools/realtime_publisher.h>
+
 int main(int argc, char** argv) {
   // Check whether the required arguments were passed
   if (argc != 2) {
@@ -28,6 +35,16 @@ int main(int argc, char** argv) {
                                      Eigen::MatrixXd::Identity(3, 3);
   damping.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
                                          Eigen::MatrixXd::Identity(3, 3);
+
+  // ROS stuff
+  ros::init(argc, argv, "franka_pub");
+  ros::NodeHandle nh;
+  realtime_tools::RealtimePublisher<articulated::ReducedFrankaState> ros_publisher;
+  ros_publisher.init(nh, "franka_msg", 1);
+  auto time_since = std::make_unique<double>(0.0);
+  double time_begin = 0.0;
+  bool has_not_started = true;
+
   try {
     // connect to robot
     franka::Robot robot(argv[1]);
@@ -47,7 +64,13 @@ int main(int argc, char** argv) {
     // define callback for the torque control loop
     std::function<franka::Torques(const franka::RobotState&, franka::Duration)>
         impedance_control_callback = [&](const franka::RobotState& robot_state,
-                                         franka::Duration /*duration*/) -> franka::Torques {
+                                         franka::Duration duration) -> franka::Torques {
+      // ROS time since start
+      if (has_not_started) {
+        time_begin = ros::Time::now().toSec();
+        has_not_started = false;
+      }
+      *time_since = ros::Time::now().toSec() - time_begin;
       // get state variables
       std::array<double, 7> coriolis_array = model.coriolis(robot_state);
       std::array<double, 42> jacobian_array =
@@ -81,6 +104,20 @@ int main(int argc, char** argv) {
       tau_d << tau_task + coriolis;
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
+
+      // ROS stuff
+      if (ros_publisher.trylock()) {
+        for (size_t i = 0; i < 16; ++i) {
+          ros_publisher.msg_.O_T_EE[i] = robot_state.O_T_EE[i];
+          ros_publisher.msg_.EE_T_K[i] = robot_state.EE_T_K[i];
+        }
+        for (size_t i = 0; i < 6; ++i) {
+          ros_publisher.msg_.K_F_ext_hat_K[i] = robot_state.K_F_ext_hat_K[i];
+        }
+        ros_publisher.msg_.time = *time_since;
+        ros_publisher.unlockAndPublish();
+      }
+
       return tau_d_array;
     };
     // start real-time control loop

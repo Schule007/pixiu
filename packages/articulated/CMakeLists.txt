@@ -11,7 +11,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 ## is used, also find other catkin packages
 find_package (catkin
   COMPONENTS
-  roscpp rospy std_msgs genmsg
+  roscpp
+  rospy
+  std_msgs
+  franka_msgs
+  genmsg
+  realtime_tools
 )
 
 ## System dependencies are found with CMake's conventions
@@ -48,12 +53,17 @@ find_package (Franka REQUIRED)
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+if (catkin_FOUND)
+  add_message_files(
+    FILES
+    ReducedFrankaState.msg
+  )
+
+  generate_messages(
+    DEPENDENCIES
+    std_msgs
+  )
+endif()
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -107,15 +117,36 @@ find_package (Franka REQUIRED)
 if (catkin_FOUND)
   catkin_package(
   #  INCLUDE_DIRS include
-  #  LIBRARIES articulated
-  #  CATKIN_DEPENDS other_catkin_pkg
-  #  DEPENDS system_lib
+    LIBRARIES articulated
+    CATKIN_DEPENDS
+    realtime_tools
+    roscpp
+    franka_msgs
+    DEPENDS
+    Franka
   )
 endif()
 
 ###########
 ## Build ##
 ###########
+
+add_subdirectory(extern/examples_common)
+add_executable(my-sqrt src/my-sqrt.cpp)
+add_executable(impedance-example src/impedance-example.cpp)
+target_link_libraries(impedance-example
+  Eigen3::Eigen
+  Franka::Franka
+  examples_common
+)
+target_include_directories(impedance-example PUBLIC
+  "${PROJECT_BINARY_DIR}"
+  "${PROJECT_SOURCE_DIR}/extern/examples_common"
+)
+target_include_directories(impedance-example SYSTEM PUBLIC
+  ${Franka_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
+)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -126,7 +157,8 @@ if (catkin_FOUND)
   )
   add_executable(ros_pub_example src/ros_pub_example.cpp)
   target_link_libraries(ros_pub_example ${catkin_LIBRARIES})
-  # add_dependencies(ros_pub_example articulated_generate_messages_cpp)
+
+  target_link_libraries(impedance-example ${catkin_LIBRARIES})
 endif()
 
 ## Declare a C++ library
@@ -158,19 +190,6 @@ endif()
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-
-add_subdirectory(extern/examples_common)
-add_executable(my-sqrt src/my-sqrt.cpp)
-add_executable(impedance-example src/impedance-example.cpp)
-target_link_libraries(impedance-example
-  Eigen3::Eigen
-  Franka::Franka
-  examples_common
-)
-target_include_directories(impedance-example PUBLIC
-  "${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/extern/examples_common"
-)
 
 #############
 ## Install ##
