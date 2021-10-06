@@ -63,8 +63,15 @@ RUN cd ${home}/from_src/libfranka &&\
 # https://github.com/frankaemika/franka_ros
 
 ### ROS control and its friends
-RUN sudo apt-get install -qqy --no-install-recommends\
+RUN sudo apt-get update && sudo apt-get install -qqy --no-install-recommends\
     ros-noetic-ros-control ros-noetic-ros-controllers
+
+### Pybind
+RUN git clone https://github.com/pybind/pybind11.git -b stable ${home}/from_src/pybind11
+RUN cd ${home}/from_src/pybind11 &&\
+    cmake -S . -B build &&\
+    cmake --build build -j 2 &&\
+    sudo cmake --install build
 
 #################### Development tools ######################
 
@@ -90,6 +97,7 @@ RUN mkdir ${home}/workspace
 RUN mkdir ${home}/.ssh
 RUN mkdir ${home}/catkin_ws
 RUN mkdir ${home}/.virtualenvs
+RUN mkdir ${home}/.local
 
 # modify /start.sh
 RUN sudo cp -r /root/.config ${home}/.config
@@ -100,6 +108,7 @@ RUN sudo sed -i -e\
 
 # modify bashrc
 RUN printf '\n\
+export PATH=$HOME/.local/bin:/opt/openrobots/bin:$PATH\n\
 export PATH=/opt/openrobots/bin:$PATH\n\
 export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH\n\
 export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH\n\
@@ -109,10 +118,6 @@ export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH\n\
 rossetup () {\n\
     source /opt/ros/noetic/setup.bash\n\
     [ -f "$HOME/catkin_ws/devel/setup.bash" ] && source "$HOME/catkin_ws/devel/setup.bash"\n\
-}\n\
-\n\
-activate-venv () {\n\
-    source "$HOME/.virtualenvs/$1/bin/activate"\n\
 }' >> ${home}/.bashrc
 ############ Entrypoint ###############
 ENV HOME=${home}

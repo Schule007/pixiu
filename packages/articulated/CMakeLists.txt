@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package (catkin
+find_package (catkin REQUIRED
   COMPONENTS
   roscpp
   rospy
@@ -21,13 +21,14 @@ find_package (catkin
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
+find_package (pybind11 REQUIRED)
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (Franka REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -53,17 +54,16 @@ find_package (Franka REQUIRED)
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-if (catkin_FOUND)
-  add_message_files(
-    FILES
-    ReducedFrankaState.msg
-  )
+add_message_files(
+  FILES
+  ImpedanceRegulationState.msg
+  ReducedFrankaState.msg
+)
 
-  generate_messages(
-    DEPENDENCIES
-    std_msgs
-  )
-endif()
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -114,30 +114,31 @@ endif()
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-if (catkin_FOUND)
-  catkin_package(
-  #  INCLUDE_DIRS include
-    LIBRARIES articulated
-    CATKIN_DEPENDS
-    realtime_tools
-    roscpp
-    franka_msgs
-    DEPENDS
-    Franka
-  )
-endif()
+catkin_package(
+#  INCLUDE_DIRS include
+  LIBRARIES articulated
+  CATKIN_DEPENDS
+  realtime_tools
+  roscpp
+  franka_msgs
+  DEPENDS
+  Franka
+)
 
 ###########
 ## Build ##
 ###########
 
 add_subdirectory(extern/examples_common)
-add_executable(my-sqrt src/my-sqrt.cpp)
-add_executable(impedance-example src/impedance-example.cpp)
+
+pybind11_add_module(bind_example src/articulated_franka/cpp/my-sqrt.cpp)
+
+add_executable(impedance-example src/articulated_franka/cpp/impedance-example.cpp)
 target_link_libraries(impedance-example
   Eigen3::Eigen
   Franka::Franka
   examples_common
+  ${catkin_LIBRARIES}
 )
 target_include_directories(impedance-example PUBLIC
   "${PROJECT_BINARY_DIR}"
@@ -148,18 +149,23 @@ target_include_directories(impedance-example SYSTEM PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
 )
 
+add_library(articulated_franka
+  "${PROJECT_SOURCE_DIR}/src/articulated_franka/cpp/articulated_franka.cpp"
+)
+target_link_libraries(articulated_franka
+  Eigen3::Eigen
+  Franka::Franka
+)
+target_include_directories(articulated_franka PUBLIC
+  "${PROJECT_BINARY_DIR}"
+)
+
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-if (catkin_FOUND)
-  include_directories(
-    include
-    ${catkin_INCLUDE_DIRS}
-  )
-  add_executable(ros_pub_example src/ros_pub_example.cpp)
-  target_link_libraries(ros_pub_example ${catkin_LIBRARIES})
-
-  target_link_libraries(impedance-example ${catkin_LIBRARIES})
-endif()
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}

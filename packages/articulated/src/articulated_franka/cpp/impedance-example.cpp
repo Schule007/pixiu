@@ -10,6 +10,7 @@
 #include <franka/model.h>
 #include <franka/robot.h>
 #include <time.h>
+#include <string>
 #include "examples_common.h"
 
 #include "ros/ros.h"
@@ -19,13 +20,14 @@
 
 int main(int argc, char** argv) {
   // Check whether the required arguments were passed
-  if (argc != 2) {
+  if (argc < 2) {
     std::cerr << "Usage: " << argv[0] << " <robot-hostname>" << std::endl;
     return -1;
   }
   // Compliance parameters
   const double translational_stiffness{150.0};
   const double rotational_stiffness{10.0};
+  const double PI = 3.141592653589793;
   Eigen::MatrixXd stiffness(6, 6), damping(6, 6);
   stiffness.setZero();
   stiffness.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -100,7 +102,9 @@ int main(int argc, char** argv) {
       // compute control
       Eigen::VectorXd tau_task(7), tau_d(7);
       // Spring damper system with damping ratio=1
-      tau_task << jacobian.transpose() * (-stiffness * error - damping * (jacobian * dq));
+      tau_task << jacobian.transpose() * (
+        -stiffness * error - damping * (jacobian * dq)
+      );
       tau_d << tau_task + coriolis;
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
