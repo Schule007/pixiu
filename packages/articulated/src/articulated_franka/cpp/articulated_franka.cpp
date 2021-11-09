@@ -3,21 +3,11 @@
 using namespace articulated_franka;
 using Vector7d = Eigen::Matrix<double, 7, 1, Eigen::ColMajor>;
 
-ImpedanceRegulation::ImpedanceRegulation(
+ArticulatedFranka::ArticulatedFranka(
   std::shared_ptr<franka::Robot> p_robot,
-  std::shared_ptr<franka::Model> p_model,
-  double translational_stiffness=150,
-  double rotational_stiffness=10
+  std::shared_ptr<franka::Model> p_model
 ) : robot_(p_robot), model_(p_model), status_(idle)
 {
-  stiffness_.setZero();
-  stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  damping_.setZero();
-  damping_.topLeftCorner(3, 3) << 2.0 * sqrt(translational_stiffness) *
-                                     Eigen::MatrixXd::Identity(3, 3);
-  damping_.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
-                                         Eigen::MatrixXd::Identity(3, 3);
   ros::NodeHandle nh;
   pub_.init(nh, "franka_msg", 1);
   // TODO: understand and refactor the below
@@ -36,45 +26,56 @@ ImpedanceRegulation::ImpedanceRegulation(
                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
 }
 
-Vector7d ImpedanceRegulation::get_joint_position()
+Vector7d ArticulatedFranka::get_joint_position()
 {
   franka::RobotState state = robot_->readOnce();
   Vector7d ret(Vector7d::Map(state.q.data()));
   return ret;
 }
 
-Eigen::Matrix4d ImpedanceRegulation::get_o_T_ee()
+Eigen::Matrix4d ArticulatedFranka::get_o_T_ee()
 {
   franka::RobotState state = robot_->readOnce();
   Eigen::Matrix4d ret(Eigen::Matrix4d::Map(state.q.data()));
   return ret;
 }
 
-void ImpedanceRegulation::regulate_o_T_ee(Eigen::Matrix4d o_T_ee_desired)
-{
+void ArticulatedFranka::regulate_o_T_ee(
+  Eigen::Matrix4d o_T_ee_desired,
+  double translational_stiffness,
+  double rotational_stiffness
+) {
+  stiffness_.setZero();
+  stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
+  stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
+  damping_.setZero();
+  damping_.topLeftCorner(3, 3) << 2.0 * sqrt(translational_stiffness) *
+                                     Eigen::MatrixXd::Identity(3, 3);
+  damping_.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
+                                         Eigen::MatrixXd::Identity(3, 3);
   time_since_ = 0.0;
   Eigen::Affine3d desired_transform(o_T_ee_desired);
   position_d_ = desired_transform.translation();
   orientation_d_ = desired_transform.linear();
   auto f = [this] (const franka::RobotState& robot_state, franka::Duration duration) -> franka::Torques {
-    return this->control_loop(robot_state, duration);
+    return this->impedance_regulation_cb(robot_state, duration);
   };
   status_ = running;
   robot_->control(f);
   status_ = idle;
 }
 
-Status ImpedanceRegulation::get_status()
+Status ArticulatedFranka::get_status()
 {
   return status_;
 }
 
-void ImpedanceRegulation::stop()
+void ArticulatedFranka::stop()
 {
   status_ = stopping;
 }
 
-franka::Torques ImpedanceRegulation::control_loop(const franka::RobotState& robot_state, franka::Duration duration)
+franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotState& robot_state, franka::Duration duration)
 {
   time_since_ = time_since_ + duration.toSec();
 
@@ -118,8 +119,11 @@ franka::Torques ImpedanceRegulation::control_loop(const franka::RobotState& robo
       pub_.msg_.q[i] = robot_state.q[i];
       pub_.msg_.tau[i] = tau_d_array[i];
     }
-    for (size_t i = 0; i < 16; ++i) {
-      pub_.msg_.o_T_ee[i] = robot_state.O_T_EE[i];
+    for (size_t i = 0; i < 4; ++i) {
+        for (size_t j = 0; j < 4; ++j) {
+          // O_T_EE is column major
+          pub_.msg_.o_T_ee[i * 4 + j] = robot_state.O_T_EE[j * 4 + i];
+        }
     }
     for (size_t i = 0; i < 6; ++i) {
       pub_.msg_.ee_Ftask[i] = f_task[i];

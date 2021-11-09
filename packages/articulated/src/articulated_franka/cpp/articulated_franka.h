@@ -24,17 +24,19 @@ namespace articulated_franka {
 
 enum Status {running, idle, stopping};
 
-class ImpedanceRegulation {
+class ArticulatedFranka {
   public:
-    ImpedanceRegulation(
+    ArticulatedFranka(
       std::shared_ptr<franka::Robot> p_robot,
-      std::shared_ptr<franka::Model> p_model,
-      double translational_stiffness,
-      double rotational_stiffness
+      std::shared_ptr<franka::Model> p_model
     );
     Eigen::Matrix<double, 7, 1, Eigen::ColMajor> get_joint_position();
     Eigen::Matrix4d get_o_T_ee();
-    void regulate_o_T_ee(Eigen::Matrix4d o_T_ee_desired);
+    void regulate_o_T_ee(
+      Eigen::Matrix4d o_T_ee_desired,
+      double translational_stiffness,
+      double rotational_stiffness
+    );
     Status get_status();
     void stop();
   private:
@@ -44,7 +46,7 @@ class ImpedanceRegulation {
     Status status_{idle};
     Eigen::Vector3d position_d_;
     Eigen::Quaterniond orientation_d_;
-    franka::Torques control_loop(const franka::RobotState&, franka::Duration);
+    franka::Torques impedance_regulation_cb(const franka::RobotState&, franka::Duration);
     double time_since_{0.0};
     realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
 };

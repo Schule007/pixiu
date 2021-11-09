@@ -1,0 +1,5 @@
+float64[16] o_T_ee_desired  # desired end effector transform, row major
+float64 translational_stiffness
+float64 rotational_stiffness
+---
+string status

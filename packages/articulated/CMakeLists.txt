@@ -60,17 +60,18 @@ add_message_files(
   ReducedFrankaState.msg
 )
 
+add_service_files(
+  FILES
+  GetEeTransform.srv
+  RegulateEeTransform.srv
+  WordWord.srv
+)
+
 generate_messages(
   DEPENDENCIES
   std_msgs
 )
 
-## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -159,6 +160,15 @@ target_link_libraries(articulated_franka
 target_include_directories(articulated_franka PUBLIC
   "${PROJECT_BINARY_DIR}"
 )
+
+add_executable(franka_server src/articulated_franka/cpp/franka_server.cpp)
+target_link_libraries(franka_server
+  Eigen3::Eigen
+  Franka::Franka
+  articulated_franka
+  ${catkin_LIBRARIES}
+)
+target_include_directories(franka_server PUBLIC "${PROJECT_BINARY_DIR}")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
