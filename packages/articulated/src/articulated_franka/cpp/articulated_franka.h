@@ -16,6 +16,7 @@
 #include <memory>
 
 #include "ros/ros.h"
+#include "ros/console.h"
 #include "std_msgs/String.h"
 #include "articulated/ImpedanceRegulationState.h"
 #include <realtime_tools/realtime_publisher.h>
@@ -49,6 +50,7 @@ class ArticulatedFranka {
     franka::Torques impedance_regulation_cb(const franka::RobotState&, franka::Duration);
     double time_since_{0.0};
     realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
+    bool has_set_default_behavior_{false};
 };
 
 }  // namespace articulated_franka

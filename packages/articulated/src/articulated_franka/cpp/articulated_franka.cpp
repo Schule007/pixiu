@@ -10,20 +10,6 @@ ArticulatedFranka::ArticulatedFranka(
 {
   ros::NodeHandle nh;
   pub_.init(nh, "franka_msg", 1);
-  // TODO: understand and refactor the below
-  // setDefaultBehavior in example common
-  robot_->setCollisionBehavior(
-      {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
-      {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}},
-      {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
-      {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}});
-  robot_->setJointImpedance({{3000, 3000, 3000, 2500, 2500, 2000, 2000}});
-  robot_->setCartesianImpedance({{3000, 3000, 3000, 300, 300, 300}});
-  // setDefaultBehavior in cartesian example
-  robot_->setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                              {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                              {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                              {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
 }
 
 Vector7d ArticulatedFranka::get_joint_position()
@@ -36,7 +22,7 @@ Vector7d ArticulatedFranka::get_joint_position()
 Eigen::Matrix4d ArticulatedFranka::get_o_T_ee()
 {
   franka::RobotState state = robot_->readOnce();
-  Eigen::Matrix4d ret(Eigen::Matrix4d::Map(state.q.data()));
+  Eigen::Matrix4d ret(Eigen::Matrix4d::Map(state.O_T_EE.data()));
   return ret;
 }
 
@@ -45,6 +31,7 @@ void ArticulatedFranka::regulate_o_T_ee(
   double translational_stiffness,
   double rotational_stiffness
 ) {
+  ROS_INFO("Regulate end effector position");
   stiffness_.setZero();
   stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -53,6 +40,26 @@ void ArticulatedFranka::regulate_o_T_ee(
                                      Eigen::MatrixXd::Identity(3, 3);
   damping_.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
                                          Eigen::MatrixXd::Identity(3, 3);
+  if (~has_set_default_behavior_) {
+    ROS_INFO("Setting the default behavior for the first time.");
+    // TODO: understand and refactor the below
+    // setDefaultBehavior in example common
+    robot_->setCollisionBehavior(
+        {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
+        {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}},
+        {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
+        {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}});
+    robot_->setJointImpedance({{3000, 3000, 3000, 2500, 2500, 2000, 2000}});
+    robot_->setCartesianImpedance({{3000, 3000, 3000, 300, 300, 300}});
+    // setDefaultBehavior in cartesian example
+    robot_->setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                                {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                                {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                                {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
+  }
+  else {
+    has_set_default_behavior_ = true;
+  }
   time_since_ = 0.0;
   Eigen::Affine3d desired_transform(o_T_ee_desired);
   position_d_ = desired_transform.translation();
@@ -72,7 +79,9 @@ Status ArticulatedFranka::get_status()
 
 void ArticulatedFranka::stop()
 {
+  ROS_INFO("Changing status to stopping");
   status_ = stopping;
+  ROS_INFO("Changed status to stopping");
 }
 
 franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotState& robot_state, franka::Duration duration)
@@ -127,13 +136,16 @@ franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotSt
     }
     for (size_t i = 0; i < 6; ++i) {
       pub_.msg_.ee_Ftask[i] = f_task[i];
-      pub_.msg_.ee_F_ee[i] = robot_state.K_F_ext_hat_K[i];
+      pub_.msg_.ee_F_ee[i] = - robot_state.K_F_ext_hat_K[i];
     }
     pub_.msg_.time = time_since_;
     pub_.unlockAndPublish();
   }
 
   if (status_ == stopping) {
+    ROS_INFO("Status is stopping. "
+             "Sending MotionFinished and set status to idle.");
+    status_ = idle;
     return franka::MotionFinished(franka::Torques(tau_d_array));
   }
   return franka::Torques(tau_d_array);

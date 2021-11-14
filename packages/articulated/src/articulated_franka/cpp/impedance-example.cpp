@@ -50,7 +50,6 @@ int main(int argc, char** argv) {
   try {
     // connect to robot
     franka::Robot robot(argv[1]);
-    setDefaultBehavior(robot);
     // load the kinematics and dynamics model
     franka::Model model = robot.loadModel();
     franka::RobotState initial_state = robot.readOnce();
@@ -58,11 +57,6 @@ int main(int argc, char** argv) {
     Eigen::Affine3d initial_transform(Eigen::Matrix4d::Map(initial_state.O_T_EE.data()));
     Eigen::Vector3d position_d(initial_transform.translation());
     Eigen::Quaterniond orientation_d(initial_transform.linear());
-    // set collision behavior
-    robot.setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
-                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
     // define callback for the torque control loop
     std::function<franka::Torques(const franka::RobotState&, franka::Duration)>
         impedance_control_callback = [&](const franka::RobotState& robot_state,
@@ -130,6 +124,12 @@ int main(int argc, char** argv) {
               << "After starting try to push the robot and see how it reacts." << std::endl
               << "Press Enter to continue..." << std::endl;
     std::cin.ignore();
+    setDefaultBehavior(robot);
+    // set collision behavior
+    robot.setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
     robot.control(impedance_control_callback);
   } catch (const franka::Exception& ex) {
     // print exception

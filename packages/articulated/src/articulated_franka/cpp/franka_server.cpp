@@ -60,7 +60,7 @@ bool FrankaRosServiceHandler::regulate_ee_transform_cb(
   }
   catch (const franka::Exception& ex) {
     res.status = ex.what();
-    return false;
+    return true;
   }
 }
 
@@ -88,6 +88,7 @@ int main(int argc, char **argv)
   }
   std::string service_prefix = "franka_";
   ros::init(argc, argv, "franka_server");
+  ros::AsyncSpinner spinner(2);
   ros::NodeHandle n;
   auto p_robot = std::make_shared<franka::Robot>(argv[1]);
   auto p_model = std::make_shared<franka::Model>(p_robot->loadModel());
@@ -115,7 +116,8 @@ int main(int argc, char **argv)
     &service_handler
   );
 
-  ros::spin();
+  spinner.start();
+  ros::waitForShutdown();
 
   return 0;
 }
