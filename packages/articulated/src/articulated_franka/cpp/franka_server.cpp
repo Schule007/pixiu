@@ -53,7 +53,9 @@ bool FrankaRosServiceHandler::regulate_ee_transform_cb(
     p_franka_->regulate_o_T_ee(
       desired_transform,
       req.translational_stiffness,
-      req.rotational_stiffness
+      req.rotational_stiffness,
+      req.ee_control_force_bound,
+      req.ee_control_torque_bound
     );
     res.status = "success";
     return true;

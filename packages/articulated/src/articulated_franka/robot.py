@@ -33,14 +33,21 @@ class FrankaImpedanceRegulation:
         return np.array(res.o_T_ee).reshape(4, 4)
 
     def regulate_ee(
-        self, target_transform, k_translation=100.0, k_rotation=10.0
+        self,
+        target_transform,
+        k_translation=150.0,
+        k_rotation=10.0,
+        ee_control_force_bound=50,
+        ee_control_torque_bound=4,
     ) -> None:
         """Return the transform from origin to EE o_T_ee."""
         req = articulated_srv.RegulateEeTransformRequest()
         req.o_T_ee_desired = target_transform.flatten().tolist()
         req.translational_stiffness = k_translation
         req.rotational_stiffness = k_rotation
-        if self._regulate_ee_thread is None:
+        req.ee_control_force_bound = ee_control_force_bound
+        req.ee_control_torque_bound = ee_control_torque_bound
+        if self._regulate_ee_thread is not None:
             self.stop()
         self._regulate_ee_thread = threading.Thread(
             target=self._await_regulate_ee, args=[req]
@@ -72,7 +79,7 @@ if __name__ == "__main__":
     T = robot.get_ee_transform()
     print(T)
     input("Enter to regulate at ee")
-    robot.regulate_ee(T)
+    robot.regulate_ee(T, ee_control_force_bound=5)
     t0 = time.time()
     while robot.status[0] != "idle":
         time.sleep(0.5)

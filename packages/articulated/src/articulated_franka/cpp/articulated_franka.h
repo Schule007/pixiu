@@ -25,6 +25,8 @@ namespace articulated_franka {
 
 enum Status {running, idle, stopping};
 
+double clamp(double value, double lower_limit, double upper_limit);
+
 class ArticulatedFranka {
   public:
     ArticulatedFranka(
@@ -36,7 +38,9 @@ class ArticulatedFranka {
     void regulate_o_T_ee(
       Eigen::Matrix4d o_T_ee_desired,
       double translational_stiffness,
-      double rotational_stiffness
+      double rotational_stiffness,
+      double ee_control_force_bound,
+      double ee_control_torque_bound
     );
     Status get_status();
     void stop();
@@ -48,7 +52,9 @@ class ArticulatedFranka {
     Eigen::Vector3d position_d_;
     Eigen::Quaterniond orientation_d_;
     franka::Torques impedance_regulation_cb(const franka::RobotState&, franka::Duration);
-    double time_since_{0.0};
+    double time_since_{0.0},
+           ee_control_force_bound_{100},
+           ee_control_torque_bound_{100};
     realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
     bool has_set_default_behavior_{false};
 };

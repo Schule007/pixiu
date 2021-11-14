@@ -1,7 +1,20 @@
 #include "articulated_franka.h"
 
-using namespace articulated_franka;
+namespace articulated_franka {
+
 using Vector7d = Eigen::Matrix<double, 7, 1, Eigen::ColMajor>;
+
+double clamp(double value, double lower_limit, double upper_limit) {
+  if (value < lower_limit) {
+    return lower_limit;
+  }
+  else if (value > upper_limit) {
+    return upper_limit;
+  }
+  else {
+    return value;
+  }
+}
 
 ArticulatedFranka::ArticulatedFranka(
   std::shared_ptr<franka::Robot> p_robot,
@@ -29,9 +42,13 @@ Eigen::Matrix4d ArticulatedFranka::get_o_T_ee()
 void ArticulatedFranka::regulate_o_T_ee(
   Eigen::Matrix4d o_T_ee_desired,
   double translational_stiffness,
-  double rotational_stiffness
+  double rotational_stiffness,
+  double ee_control_force_bound,
+  double ee_control_torque_bound
 ) {
   ROS_INFO("Regulate end effector position");
+  ee_control_force_bound_ = ee_control_force_bound;
+  ee_control_torque_bound_ = ee_control_torque_bound;
   stiffness_.setZero();
   stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -84,8 +101,10 @@ void ArticulatedFranka::stop()
   ROS_INFO("Changed status to stopping");
 }
 
-franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotState& robot_state, franka::Duration duration)
-{
+franka::Torques ArticulatedFranka::impedance_regulation_cb(
+  const franka::RobotState& robot_state,
+  franka::Duration duration
+) {
   time_since_ = time_since_ + duration.toSec();
 
   std::array<double, 7> coriolis_array = model_->coriolis(robot_state);
@@ -116,6 +135,16 @@ franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotSt
   Eigen::VectorXd tau_task(7), tau_d(7), f_task(6);
   // Spring damper system with damping ratio=1
   f_task << -stiffness_ * error - damping_ * (jacobian * dq);
+  for (size_t i = 0; i < 3; ++i) {
+    f_task(i) = clamp(
+      f_task(i), -ee_control_force_bound_, ee_control_force_bound_
+    );
+  }
+  for (size_t i = 3; i < 6; ++i) {
+    f_task(i) = clamp(
+      f_task(i), -ee_control_torque_bound_, ee_control_torque_bound_
+    );
+  }
   tau_task << jacobian.transpose() * f_task;
   tau_d << tau_task + coriolis;
   std::array<double, 7> tau_d_array{};
@@ -150,3 +179,5 @@ franka::Torques ArticulatedFranka::impedance_regulation_cb(const franka::RobotSt
   }
   return franka::Torques(tau_d_array);
 }
+
+}  // namespace articulated_franka
