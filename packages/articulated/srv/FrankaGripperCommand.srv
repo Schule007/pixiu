@@ -1,0 +1,8 @@
+string kind  # grasp, homing, move, stop
+float64 width  # unit: m
+float64 speed  # unit: m/s
+float64 force  # unit: N
+float64 epsilon_inner  # unit: m
+float64 epsilon_outer  # unit: m
+---
+string status

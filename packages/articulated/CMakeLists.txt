@@ -65,6 +65,7 @@ add_service_files(
   GetEeTransform.srv
   RegulateEeTransform.srv
   WordWord.srv
+  FrankaGripperCommand.srv
 )
 
 generate_messages(

@@ -10,7 +10,7 @@ import articulated.srv as articulated_srv
 logger = logging.getLogger(__name__)
 
 
-class FrankaImpedanceRegulation:
+class ImpedanceRegulation:
     def __init__(self, prefix="franka_"):
         self._c_get_T_ee = rospy.ServiceProxy(
             f"/{prefix}get_ee_transform", articulated_srv.GetEeTransform

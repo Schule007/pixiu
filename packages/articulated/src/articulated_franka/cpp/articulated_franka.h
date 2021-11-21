@@ -10,6 +10,7 @@
 #include <franka/exception.h>
 #include <franka/model.h>
 #include <franka/robot.h>
+#include <franka/gripper.h>
 #include <time.h>
 #include <string>
 #include <functional>
