@@ -41,6 +41,7 @@ class ImpedanceRegulation:
         ee_control_torque_bound=4,
     ) -> None:
         """Return the transform from origin to EE o_T_ee."""
+        # TODO: change to action client
         req = articulated_srv.RegulateEeTransformRequest()
         req.o_T_ee_desired = target_transform.flatten().tolist()
         req.translational_stiffness = k_translation
@@ -55,6 +56,12 @@ class ImpedanceRegulation:
         self._status = "running"
         self._last_info = None
         self._regulate_ee_thread.start()
+        time.sleep(0.1)  # HACK: will change to action client
+        if self._last_info != "success" and self._last_info is not None:
+            raise RuntimeError(
+                "Fail to start the impedance regulation control! Info: %s"
+                % self._last_info
+            )
 
     def _await_regulate_ee(self, req):
         res = self._c_regulate_ee.call(req)
