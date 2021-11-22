@@ -83,18 +83,27 @@ class FrankaRosServiceHandler {
         return true;
       }
       if (req.kind == "move") {
-        bool success = p_gripper_ -> move(req.width, req.speed);
+        bool success = p_gripper_->move(req.width, req.speed);
         if (success) {res.status="success";} else {res.status="fail";}
         return true;
       }
       if (req.kind == "homing") {
-        bool success = p_gripper_ -> homing();
+        bool success = p_gripper_->homing();
         if (success) {res.status="success";} else {res.status="fail";}
         return true;
       }
       if (req.kind == "stop") {
-        bool success = p_gripper_ -> stop();
+        bool success = p_gripper_->stop();
         if (success) {res.status="success";} else {res.status="fail";}
+        return true;
+      }
+      if (req.kind == "read") {
+        franka::GripperState state = p_gripper_->readOnce();
+        res.status = "read";
+        res.width = state.width;
+        res.max_width = state.max_width;
+        res.temperature = state.temperature;
+        res.is_grasped = state.is_grasped;
         return true;
       }
       res.status = "unknown-command";
