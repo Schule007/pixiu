@@ -1,4 +1,4 @@
-#include "articulated_franka.h"
+#include "articulated/articulated_franka.h"
 
 namespace articulated_franka {
 
@@ -57,7 +57,7 @@ void ArticulatedFranka::regulate_o_T_ee(
                                      Eigen::MatrixXd::Identity(3, 3);
   damping_.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
                                          Eigen::MatrixXd::Identity(3, 3);
-  if (~has_set_default_behavior_) {
+  if (!has_set_default_behavior_) {
     ROS_INFO("Setting the default behavior for the first time.");
     // TODO: understand and refactor the below
     // setDefaultBehavior in example common

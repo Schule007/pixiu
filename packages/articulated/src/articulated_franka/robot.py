@@ -1,10 +1,12 @@
-import threading
 import time
 import logging
 
 import numpy as np
 import rospy
-import articulated.srv as articulated_srv
+import actionlib
+from actionlib_msgs.msg import GoalStatus
+import articulated.srv
+import articulated.msg
 
 
 logger = logging.getLogger(__name__)
@@ -13,19 +15,21 @@ logger = logging.getLogger(__name__)
 class ImpedanceRegulation:
     def __init__(self, prefix="franka_"):
         self._c_get_T_ee = rospy.ServiceProxy(
-            f"/{prefix}get_ee_transform", articulated_srv.GetEeTransform
+            f"/{prefix}get_ee_transform", articulated.srv.GetEeTransform
         )
-        self._c_regulate_ee = rospy.ServiceProxy(
-            f"/{prefix}regulate_ee_transform", articulated_srv.RegulateEeTransform
+        self._c_regulate_ee = actionlib.SimpleActionClient(
+            f"/{prefix}regulate_ee_transform", articulated.msg.RegulateEeTransformAction
         )
-        self._c_stop = rospy.ServiceProxy(f"/{prefix}stop", articulated_srv.WordWord)
-        self._regulate_ee_thread = None
         self._status = "idle"
-        self._last_info = None
 
-    @property
-    def status(self):
-        return self._status, self._last_info
+    def is_idle(self):
+        state = self._c_regulate_ee.get_state()
+        return (
+            state == GoalStatus.SUCCEEDED
+            or state == GoalStatus.PREEMPTED
+            or state == GoalStatus.ABORTED
+            or state == GoalStatus.LOST
+        )
 
     def get_ee_transform(self):
         """Return the transform from origin to EE o_T_ee."""
@@ -41,56 +45,49 @@ class ImpedanceRegulation:
         ee_control_torque_bound=4,
     ) -> None:
         """Return the transform from origin to EE o_T_ee."""
-        # TODO: change to action client
-        req = articulated_srv.RegulateEeTransformRequest()
-        req.o_T_ee_desired = target_transform.flatten().tolist()
-        req.translational_stiffness = k_translation
-        req.rotational_stiffness = k_rotation
-        req.ee_control_force_bound = ee_control_force_bound
-        req.ee_control_torque_bound = ee_control_torque_bound
-        if self._regulate_ee_thread is not None:
-            self.stop()
-        self._regulate_ee_thread = threading.Thread(
-            target=self._await_regulate_ee, args=[req]
-        )
-        self._status = "running"
-        self._last_info = None
-        self._regulate_ee_thread.start()
-        time.sleep(0.1)  # HACK: will change to action client
-        if self._last_info != "success" and self._last_info is not None:
-            raise RuntimeError(
-                "Fail to start the impedance regulation control! Info: %s"
-                % self._last_info
-            )
-
-    def _await_regulate_ee(self, req):
-        res = self._c_regulate_ee.call(req)
-        self._status = "idle"
-        self._last_info = res.status
+        if not self._c_regulate_ee.wait_for_server(rospy.Duration(3)):
+            raise RuntimeError("Action server connection time out!")
+        goal = articulated.msg.RegulateEeTransformGoal()
+        goal.o_T_ee_desired = target_transform.flatten().tolist()
+        goal.translational_stiffness = k_translation
+        goal.rotational_stiffness = k_rotation
+        goal.ee_control_force_bound = ee_control_force_bound
+        goal.ee_control_torque_bound = ee_control_torque_bound
+        self._c_regulate_ee.send_goal(goal)
+        state = self._c_regulate_ee.get_state()
+        t0 = time.time()
+        while state == GoalStatus.PENDING:
+            state = self._c_regulate_ee.get_state()
+            rospy.sleep(1)
+            if time.time() - t0 > 10:
+                self._c_regulate_ee.cancel_goal()
+                raise RuntimeError("Timeout!")
+        if state == GoalStatus.ABORTED:
+            result = self._c_regulate_ee.get_result()
+            raise RuntimeError("Goal aborted! %s" % result.status)
 
     def stop(self):
-        if self._regulate_ee_thread is not None:
-            logger.info("Stopping")
-            res = self._c_stop("stop")
-            logger.info("Stopping response: %s", res.res)
-            self._regulate_ee_thread.join()
-            self._status = "idle"
-            self._regulate_ee_thread = None
-        else:
-            logger.info("No thread running")
+        if self.is_idle():
+            logger.info("Robot is idle. No need to stop")
+            return
+        self._c_regulate_ee.cancel_goal()
+        t0 = time.time()
+        while not self.is_idle():
+            time.sleep(0.001)
+            if time.time() - t0 > 3:
+                raise RuntimeError("Stop timeout!")
 
 
 if __name__ == "__main__":
     rospy.init_node("franka_client_interface")
-    robot = FrankaImpedanceRegulation()
+    robot = ImpedanceRegulation()
     T = robot.get_ee_transform()
     print(T)
     input("Enter to regulate at ee")
     robot.regulate_ee(T, ee_control_force_bound=5)
     t0 = time.time()
-    while robot.status[0] != "idle":
+    while (not robot.is_idle()) and (time.time() - t0 < 10):
         time.sleep(0.5)
         if time.time() - t0 > 3:
             print("Command to stop")
             robot.stop()
-    print(robot.status)

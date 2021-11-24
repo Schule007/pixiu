@@ -17,6 +17,7 @@ find_package (catkin REQUIRED
   franka_msgs
   genmsg
   realtime_tools
+  actionlib
 )
 
 ## System dependencies are found with CMake's conventions
@@ -68,9 +69,15 @@ add_service_files(
   FrankaGripperCommand.srv
 )
 
+add_action_files(
+  FILES
+  RegulateEeTransform.action
+)
+
 generate_messages(
   DEPENDENCIES
   std_msgs
+  actionlib_msgs
 )
 
 
@@ -133,24 +140,6 @@ catkin_package(
 
 add_subdirectory(extern/examples_common)
 
-pybind11_add_module(bind_example src/articulated_franka/cpp/my-sqrt.cpp)
-
-add_executable(impedance-example src/articulated_franka/cpp/impedance-example.cpp)
-target_link_libraries(impedance-example
-  Eigen3::Eigen
-  Franka::Franka
-  examples_common
-  ${catkin_LIBRARIES}
-)
-target_include_directories(impedance-example PUBLIC
-  "${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/extern/examples_common"
-)
-target_include_directories(impedance-example SYSTEM PUBLIC
-  ${Franka_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIRS}
-)
-
 add_library(articulated_franka
   "${PROJECT_SOURCE_DIR}/src/articulated_franka/cpp/articulated_franka.cpp"
 )
@@ -160,6 +149,7 @@ target_link_libraries(articulated_franka
 )
 target_include_directories(articulated_franka PUBLIC
   "${PROJECT_BINARY_DIR}"
+  "${PROJECT_BINARY_DIR}/include"
 )
 
 add_executable(franka_server src/articulated_franka/cpp/franka_server.cpp)
@@ -169,7 +159,10 @@ target_link_libraries(franka_server
   articulated_franka
   ${catkin_LIBRARIES}
 )
-target_include_directories(franka_server PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(franka_server PUBLIC
+  "${PROJECT_BINARY_DIR}"
+  "${PROJECT_BINARY_DIR}/include"
+)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations

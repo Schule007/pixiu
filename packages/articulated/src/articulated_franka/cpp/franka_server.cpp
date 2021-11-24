@@ -1,11 +1,13 @@
 #include <array>
 #include <memory>
-#include "ros/ros.h"
-#include "articulated_franka.h"
-#include "articulated/GetEeTransform.h"
-#include "articulated/RegulateEeTransform.h"
-#include "articulated/WordWord.h"
-#include "articulated/FrankaGripperCommand.h"
+#include <ros/ros.h>
+#include <actionlib/server/simple_action_server.h>
+#include <articulated/articulated_franka.h>
+#include <articulated/GetEeTransform.h>
+#include <articulated/RegulateEeTransform.h>
+#include <articulated/WordWord.h>
+#include <articulated/FrankaGripperCommand.h>
+#include <articulated/RegulateEeTransformAction.h>
 
 namespace af = articulated_franka;
 
@@ -29,32 +31,49 @@ class FrankaRosServiceHandler {
       return true;
     }
 
-    // TODO: change to action server
-    bool regulate_ee_transform_cb(
-      articulated::RegulateEeTransform::Request &req,
-      articulated::RegulateEeTransform::Response &res
+    void regulate_ee_transform_cb(
+      const articulated::RegulateEeTransformGoalConstPtr& goal,
+      actionlib::SimpleActionServer<articulated::RegulateEeTransformAction>* as
     ) {
+      articulated::RegulateEeTransformResult result;
       try {
         Eigen::Matrix4d desired_transform;
         for (size_t r = 0; r < 4; ++r) {
           for (size_t c = 0; c < 4; ++c) {
-            // req.o_T_ee_desired is row major
-            desired_transform(r, c) = req.o_T_ee_desired[r * 4 + c];
+            // goal.o_T_ee_desired is row major
+            desired_transform(r, c) = goal->o_T_ee_desired[r * 4 + c];
           }
         }
         p_franka_->regulate_o_T_ee(
           desired_transform,
-          req.translational_stiffness,
-          req.rotational_stiffness,
-          req.ee_control_force_bound,
-          req.ee_control_torque_bound
+          goal->translational_stiffness,
+          goal->rotational_stiffness,
+          goal->ee_control_force_bound,
+          goal->ee_control_torque_bound
         );
-        res.status = "success";
-        return true;
+        if (as->isPreemptRequested() || !ros::ok()) {
+          result.status = "reglation-preempted";
+          as->setPreempted(result);
+        }
+        else {
+          result.status = "terminate-without-preemption";
+          as->setSucceeded(result);
+        }
+
       }
       catch (const franka::Exception& ex) {
-        res.status = ex.what();
-        return true;
+        ROS_WARN("Exception during control loop %s", ex.what());
+        result.status =ex.what();
+        as->setAborted(result);
+      }
+    }
+
+    void preempt_regulate_ee_transform_cb() {
+      ROS_INFO("Stopping robot control loop");
+      p_franka_->stop();
+      ros::Rate r(1);
+      while (p_franka_->get_status() != af::idle and ros::ok()) {
+        r.sleep();
       }
     }
 
@@ -83,7 +102,9 @@ class FrankaRosServiceHandler {
         return true;
       }
       if (req.kind == "move") {
+        ROS_INFO("Start to move gripper");
         bool success = p_gripper_->move(req.width, req.speed);
+        ROS_INFO("Finish to move gripper");
         if (success) {res.status="success";} else {res.status="fail";}
         return true;
       }
@@ -132,15 +153,18 @@ int main(int argc, char **argv)
   auto p_gripper = std::make_shared<franka::Gripper>(argv[1]);
   auto service_handler = FrankaRosServiceHandler(p_franka, p_gripper);
 
+  actionlib::SimpleActionServer<articulated::RegulateEeTransformAction> server(
+    n, service_prefix + "regulate_ee_transform",
+    boost::bind(&FrankaRosServiceHandler::regulate_ee_transform_cb, service_handler, _1, &server), false
+  );
+  server.registerPreemptCallback(
+    boost::bind(&FrankaRosServiceHandler::preempt_regulate_ee_transform_cb, service_handler)
+  );
+  server.start();
+
   ros::ServiceServer get_ee_transform_service = n.advertiseService(
     service_prefix + "get_ee_transform",
     &FrankaRosServiceHandler::get_ee_transform_cb,
-    &service_handler
-  );
-
-  ros::ServiceServer regulate_ee_transform_service = n.advertiseService(
-    service_prefix + "regulate_ee_transform",
-    &FrankaRosServiceHandler::regulate_ee_transform_cb,
     &service_handler
   );
 
