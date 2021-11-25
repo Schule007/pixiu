@@ -1,0 +1,13 @@
+string kind  # grasp, homing, move, stop, read
+float64 width  # unit: m
+float64 speed  # unit: m/s
+float64 force  # unit: N
+float64 epsilon_inner  # unit: m
+float64 epsilon_outer  # unit: m
+---
+string status
+# Below are GripperState https://frankaemika.github.io/libfranka/structfranka_1_1GripperState.html
+float64 max_width
+uint16 temperature  # in C
+float64 width
+bool is_grasped

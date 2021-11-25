@@ -30,6 +30,9 @@ docker run -d\
        --name renv\
        -w="/home/joe"\
        --init\
+       --ulimit rtprio=99:99\
+       --ulimit memlock=102400:102400\
+       --cap-add=sys_nice\
        linfenglee/robotics-ubuntu20-devenv:latest sleep infinity
 ```
 

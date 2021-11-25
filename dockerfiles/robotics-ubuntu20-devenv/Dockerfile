@@ -46,9 +46,32 @@ RUN curl http://robotpkg.openrobots.org/packages/debian/robotpkg.key | sudo apt-
 RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
     robotpkg-py38-pinocchio robotpkg-py38-example-robot-data
 
-### Franka driver
-RUN sudo apt-get update && sudo apt install -qqy --no-install-recommends\
-    ros-noetic-libfranka ros-noetic-franka-ros
+### Franka driver 0.7.1, corresponding to firmware version 3
+# Firmware version 4 can install ros-noetic-libfranka and ros-noetic-franka-ros directly
+RUN sudo apt install -qqy --no-install-recommends build-essential cmake git libpoco-dev libeigen3-dev
+RUN git clone --recursive https://github.com/frankaemika/libfranka ${home}/from_src/libfranka
+RUN cd ${home}/from_src/libfranka &&\
+    git checkout 0.7.1 &&\
+    git submodule update &&\
+    mkdir build &&\
+    cd build &&\
+    cmake -DCMAKE_BUILD_TYPE=Release .. &&\
+    cmake --build . &&\
+    cpack -G DEB &&\
+    sudo dpkg -i libfranka-0.7.1-amd64.deb
+# Then build franka-ros from source using catkin
+# https://github.com/frankaemika/franka_ros
+
+### ROS control and its friends
+RUN sudo apt-get update && sudo apt-get install -qqy --no-install-recommends\
+    ros-noetic-ros-control ros-noetic-ros-controllers
+
+### Pybind
+RUN git clone https://github.com/pybind/pybind11.git -b stable ${home}/from_src/pybind11
+RUN cd ${home}/from_src/pybind11 &&\
+    cmake -S . -B build &&\
+    cmake --build build -j 2 &&\
+    sudo cmake --install build
 
 #################### Development tools ######################
 
@@ -74,6 +97,7 @@ RUN mkdir ${home}/workspace
 RUN mkdir ${home}/.ssh
 RUN mkdir ${home}/catkin_ws
 RUN mkdir ${home}/.virtualenvs
+RUN mkdir ${home}/.local
 
 # modify /start.sh
 RUN sudo cp -r /root/.config ${home}/.config
@@ -84,6 +108,7 @@ RUN sudo sed -i -e\
 
 # modify bashrc
 RUN printf '\n\
+export PATH=$HOME/.local/bin:/opt/openrobots/bin:$PATH\n\
 export PATH=/opt/openrobots/bin:$PATH\n\
 export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH\n\
 export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH\n\
@@ -91,11 +116,8 @@ export PYTHONPATH=/opt/openrobots/lib/python3.8/site-packages:$PYTHONPATH\n\
 export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH\n\
 \n\
 rossetup () {\n\
-    source /opt/ros/noetic/setup.bash  # Note that the catkin ws setup is not included here\n\
-}\n\
-\n\
-activate-venv () {\n\
-    source "$HOME/.virtualenvs/$1/bin/activate"\n\
+    source /opt/ros/noetic/setup.bash\n\
+    [ -f "$HOME/catkin_ws/devel/setup.bash" ] && source "$HOME/catkin_ws/devel/setup.bash"\n\
 }' >> ${home}/.bashrc
 ############ Entrypoint ###############
 ENV HOME=${home}
