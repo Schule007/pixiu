@@ -58,7 +58,7 @@ class ImpedanceRegulation:
         t0 = time.time()
         while state == GoalStatus.PENDING:
             state = self._c_regulate_ee.get_state()
-            rospy.sleep(1)
+            rospy.sleep(0.001)
             if time.time() - t0 > 10:
                 self._c_regulate_ee.cancel_goal()
                 raise RuntimeError("Timeout!")

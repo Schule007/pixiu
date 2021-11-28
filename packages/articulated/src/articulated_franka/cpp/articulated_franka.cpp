@@ -53,9 +53,9 @@ void ArticulatedFranka::regulate_o_T_ee(
   stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   damping_.setZero();
-  damping_.topLeftCorner(3, 3) << 2.0 * sqrt(translational_stiffness) *
+  damping_.topLeftCorner(3, 3) << 2.5 * sqrt(translational_stiffness) *
                                      Eigen::MatrixXd::Identity(3, 3);
-  damping_.bottomRightCorner(3, 3) << 2.0 * sqrt(rotational_stiffness) *
+  damping_.bottomRightCorner(3, 3) << 2.5 * sqrt(rotational_stiffness) *
                                          Eigen::MatrixXd::Identity(3, 3);
   if (!has_set_default_behavior_) {
     ROS_INFO("Setting the default behavior for the first time.");
@@ -133,7 +133,6 @@ franka::Torques ArticulatedFranka::impedance_regulation_cb(
   error.tail(3) << -transform.linear() * error.tail(3);
   // compute control
   Eigen::VectorXd tau_task(7), tau_d(7), f_task(6);
-  // Spring damper system with damping ratio=1
   f_task << -stiffness_ * error - damping_ * (jacobian * dq);
   for (size_t i = 0; i < 3; ++i) {
     f_task(i) = clamp(

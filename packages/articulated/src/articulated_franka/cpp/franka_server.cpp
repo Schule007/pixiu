@@ -71,7 +71,7 @@ class FrankaRosServiceHandler {
     void preempt_regulate_ee_transform_cb() {
       ROS_INFO("Stopping robot control loop");
       p_franka_->stop();
-      ros::Rate r(1);
+      ros::Rate r(1000);
       while (p_franka_->get_status() != af::idle and ros::ok()) {
         r.sleep();
       }
