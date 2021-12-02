@@ -124,8 +124,8 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-  LIBRARIES articulated
+  INCLUDE_DIRS include
+  LIBRARIES articulated_franka
   CATKIN_DEPENDS
   realtime_tools
   roscpp
@@ -142,10 +142,13 @@ add_subdirectory(extern/examples_common)
 
 add_library(articulated_franka
   "${PROJECT_SOURCE_DIR}/src/articulated_franka/cpp/articulated_franka.cpp"
+  "${PROJECT_SOURCE_DIR}/src/articulated_franka/cpp/control_law.cpp"
+  "${PROJECT_SOURCE_DIR}/src/articulated_franka/cpp/ros_handler.cpp"
 )
 target_link_libraries(articulated_franka
   Eigen3::Eigen
   Franka::Franka
+  ${catkin_LIBRARIES}
 )
 target_include_directories(articulated_franka PUBLIC
   "${PROJECT_BINARY_DIR}"

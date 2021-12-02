@@ -1,29 +1,16 @@
-#include "articulated/articulated_franka.h"
+#include "articulated/franka/articulated_franka.h"
+#include <array>
+#include <franka/control_types.h>
+#include <stdexcept>
 
 namespace articulated_franka {
 
 using Vector7d = Eigen::Matrix<double, 7, 1, Eigen::ColMajor>;
 
-double clamp(double value, double lower_limit, double upper_limit) {
-  if (value < lower_limit) {
-    return lower_limit;
-  }
-  else if (value > upper_limit) {
-    return upper_limit;
-  }
-  else {
-    return value;
-  }
-}
-
 ArticulatedFranka::ArticulatedFranka(
   std::shared_ptr<franka::Robot> p_robot,
   std::shared_ptr<franka::Model> p_model
-) : robot_(p_robot), model_(p_model), status_(idle)
-{
-  ros::NodeHandle nh;
-  pub_.init(nh, "franka_msg", 1);
-}
+) : robot_(p_robot), model_(p_model), status_(idle) {}
 
 Vector7d ArticulatedFranka::get_joint_position()
 {
@@ -39,24 +26,38 @@ Eigen::Matrix4d ArticulatedFranka::get_o_T_ee()
   return ret;
 }
 
-void ArticulatedFranka::regulate_o_T_ee(
-  Eigen::Matrix4d o_T_ee_desired,
-  double translational_stiffness,
-  double rotational_stiffness,
-  double ee_control_force_bound,
-  double ee_control_torque_bound
-) {
-  ROS_INFO("Regulate end effector position");
-  ee_control_force_bound_ = ee_control_force_bound;
-  ee_control_torque_bound_ = ee_control_torque_bound;
-  stiffness_.setZero();
-  stiffness_.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  stiffness_.bottomRightCorner(3, 3) << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  damping_.setZero();
-  damping_.topLeftCorner(3, 3) << 2.5 * sqrt(translational_stiffness) *
-                                     Eigen::MatrixXd::Identity(3, 3);
-  damping_.bottomRightCorner(3, 3) << 2.5 * sqrt(rotational_stiffness) *
-                                         Eigen::MatrixXd::Identity(3, 3);
+Status ArticulatedFranka::get_status()
+{
+  return status_;
+}
+
+void ArticulatedFranka::start_torque_control(std::shared_ptr<FrankaControlLaw> p_control_law) {
+  if (status_ != idle)
+    throw std::runtime_error("Franka is not idle!");
+  this->set_default_behavior_();
+
+  float time_since = 0.0;
+  auto f = [this, &time_since, p_control_law]
+    (const franka::RobotState& robot_state, franka::Duration duration) -> franka::Torques {
+    time_since = time_since + duration.toSec();
+    auto cmd = franka::Torques(p_control_law->compute(robot_state, time_since, model_));
+    if (this->status_ == stopping)
+      return franka::MotionFinished(cmd);
+    return cmd;
+  };
+  status_ = running;
+  robot_->control(f);
+  status_ = idle;
+}
+
+void ArticulatedFranka::stop()
+{
+  ROS_INFO("Changing status to stopping");
+  status_ = stopping;
+  ROS_INFO("Changed status to stopping");
+}
+
+void ArticulatedFranka::set_default_behavior_() {
   if (!has_set_default_behavior_) {
     ROS_INFO("Setting the default behavior for the first time.");
     // TODO: understand and refactor the below
@@ -74,109 +75,6 @@ void ArticulatedFranka::regulate_o_T_ee(
                                 {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
                                 {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
   }
-  else {
-    has_set_default_behavior_ = true;
-  }
-  time_since_ = 0.0;
-  Eigen::Affine3d desired_transform(o_T_ee_desired);
-  position_d_ = desired_transform.translation();
-  orientation_d_ = desired_transform.linear();
-  auto f = [this] (const franka::RobotState& robot_state, franka::Duration duration) -> franka::Torques {
-    return this->impedance_regulation_cb(robot_state, duration);
-  };
-  status_ = running;
-  robot_->control(f);
-  status_ = idle;
-}
-
-Status ArticulatedFranka::get_status()
-{
-  return status_;
-}
-
-void ArticulatedFranka::stop()
-{
-  ROS_INFO("Changing status to stopping");
-  status_ = stopping;
-  ROS_INFO("Changed status to stopping");
-}
-
-franka::Torques ArticulatedFranka::impedance_regulation_cb(
-  const franka::RobotState& robot_state,
-  franka::Duration duration
-) {
-  time_since_ = time_since_ + duration.toSec();
-
-  std::array<double, 7> coriolis_array = model_->coriolis(robot_state);
-  std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
-  // convert to Eigen
-  Eigen::Map<const Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-  Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-  Eigen::Map<const Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
-  Eigen::Map<const Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
-  Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
-  Eigen::Vector3d position(transform.translation());
-  Eigen::Quaterniond orientation(transform.linear());
-  // compute error to desired equilibrium pose
-  // position error
-  Eigen::Matrix<double, 6, 1> error;
-  error.head(3) << position - position_d_;
-  // orientation error
-  // "difference" quaternion
-  if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
-    orientation.coeffs() << -orientation.coeffs();
-  }
-  // "difference" quaternion
-  Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
-  error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
-  // Transform to base frame
-  error.tail(3) << -transform.linear() * error.tail(3);
-  // compute control
-  Eigen::VectorXd tau_task(7), tau_d(7), f_task(6);
-  f_task << -stiffness_ * error - damping_ * (jacobian * dq);
-  for (size_t i = 0; i < 3; ++i) {
-    f_task(i) = clamp(
-      f_task(i), -ee_control_force_bound_, ee_control_force_bound_
-    );
-  }
-  for (size_t i = 3; i < 6; ++i) {
-    f_task(i) = clamp(
-      f_task(i), -ee_control_torque_bound_, ee_control_torque_bound_
-    );
-  }
-  tau_task << jacobian.transpose() * f_task;
-  tau_d << tau_task + coriolis;
-  std::array<double, 7> tau_d_array{};
-  Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
-
-  // ROS stuff
-  if (pub_.trylock()) {
-    pub_.msg_.dim_q = 7;
-    for (size_t i = 0; i < 7; ++i) {
-      pub_.msg_.q[i] = robot_state.q[i];
-      pub_.msg_.tau[i] = tau_d_array[i];
-    }
-    for (size_t i = 0; i < 4; ++i) {
-        for (size_t j = 0; j < 4; ++j) {
-          // O_T_EE is column major
-          pub_.msg_.o_T_ee[i * 4 + j] = robot_state.O_T_EE[j * 4 + i];
-        }
-    }
-    for (size_t i = 0; i < 6; ++i) {
-      pub_.msg_.ee_Ftask[i] = f_task[i];
-      pub_.msg_.ee_F_ee[i] = - robot_state.K_F_ext_hat_K[i];
-    }
-    pub_.msg_.time = time_since_;
-    pub_.unlockAndPublish();
-  }
-
-  if (status_ == stopping) {
-    ROS_INFO("Status is stopping. "
-             "Sending MotionFinished and set status to idle.");
-    status_ = idle;
-    return franka::MotionFinished(franka::Torques(tau_d_array));
-  }
-  return franka::Torques(tau_d_array);
 }
 
 }  // namespace articulated_franka
