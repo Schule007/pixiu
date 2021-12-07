@@ -33,6 +33,7 @@ RUN mkdir -p /etc/sudoers.d \
 USER ${user}
 RUN sudo usermod -a -G video ${user}
 WORKDIR ${home}
+ENV HOME ${home}
 
 #################### Additional libraries ######################
 
@@ -56,7 +57,7 @@ RUN cd ${home}/from_src/libfranka &&\
     mkdir build &&\
     cd build &&\
     cmake -DCMAKE_BUILD_TYPE=Release .. &&\
-    cmake --build . &&\
+    MAKEFLAGS=-j$(nproc) cmake --build . &&\
     cpack -G DEB &&\
     sudo dpkg -i libfranka-0.7.1-amd64.deb
 # Then build franka-ros from source using catkin
@@ -70,7 +71,7 @@ RUN sudo apt-get update && sudo apt-get install -qqy --no-install-recommends\
 RUN git clone https://github.com/pybind/pybind11.git -b stable ${home}/from_src/pybind11
 RUN cd ${home}/from_src/pybind11 &&\
     cmake -S . -B build &&\
-    cmake --build build -j 2 &&\
+    cmake --build build -j$(nproc) &&\
     sudo cmake --install build
 
 #################### Development tools ######################
@@ -83,6 +84,13 @@ RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends emacs
 RUN sudo apt-get install -y --no-install-recommends\
     stow tmux fzf direnv python3.8-venv xsel
 
+# python
+RUN pip install --user python-lsp-server[rope,pyflakes] pytest black
+
+# C++
+RUN sudo apt-get install -y --no-install-recommends clangd-12 \
+  && sudo update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-12 100
+
 # install ripgrep (rg)
 RUN curl -LO https://github.com/BurntSushi/ripgrep/releases/download/11.0.2/ripgrep_11.0.2_amd64.deb\
   && sudo dpkg -i ripgrep_11.0.2_amd64.deb\
@@ -92,12 +100,12 @@ RUN curl -LO https://github.com/BurntSushi/ripgrep/releases/download/11.0.2/ripg
 ENV TERM xterm-256color
 
 # empty folders to avoid permission issue
-RUN mkdir ${home}/dotfiles
-RUN mkdir ${home}/workspace
-RUN mkdir ${home}/.ssh
-RUN mkdir ${home}/catkin_ws
-RUN mkdir ${home}/.virtualenvs
-RUN mkdir ${home}/.local
+RUN mkdir -p ${home}/dotfiles
+RUN mkdir -p ${home}/workspace
+RUN mkdir -p ${home}/.ssh
+RUN mkdir -p ${home}/catkin_ws
+RUN mkdir -p ${home}/.virtualenvs
+RUN mkdir -p ${home}/.local
 
 # modify /start.sh
 RUN sudo cp -r /root/.config ${home}/.config
