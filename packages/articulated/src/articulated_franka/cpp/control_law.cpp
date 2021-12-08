@@ -87,19 +87,20 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   // Transform to base frame
   error.tail(3) << -transform.linear() * error.tail(3);
   // compute control
-  Eigen::VectorXd tau_task(7), tau_d(7), f_task(6);
-  f_task << -stiffness_ * error - damping_ * (jacobian * dq);
+  Eigen::VectorXd tau_task(7), tau_d(7);
+  const std::lock_guard<std::mutex> lock_f_task(f_task_mutex_);
+  f_task_ << -stiffness_ * error - damping_ * (jacobian * dq);
   for (size_t i = 0; i < 3; ++i) {
-    f_task(i) = clamp(
-      f_task(i), -ee_control_force_bound_, ee_control_force_bound_
+    f_task_(i) = clamp(
+      f_task_(i), -ee_control_force_bound_, ee_control_force_bound_
     );
   }
   for (size_t i = 3; i < 6; ++i) {
-    f_task(i) = clamp(
-      f_task(i), -ee_control_torque_bound_, ee_control_torque_bound_
+    f_task_(i) = clamp(
+      f_task_(i), -ee_control_torque_bound_, ee_control_torque_bound_
     );
   }
-  tau_task << jacobian.transpose() * f_task;
+  tau_task << jacobian.transpose() * f_task_;
   tau_d << tau_task + coriolis;
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
@@ -117,7 +118,7 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
         }
     }
     for (size_t i = 0; i < 6; ++i) {
-      pub_.msg_.ee_Ftask[i] = f_task[i];
+      pub_.msg_.ee_Ftask[i] = f_task_[i];
       pub_.msg_.ee_F_ee[i] = - robot_state.K_F_ext_hat_K[i];
     }
     pub_.msg_.time = time_since_start;
@@ -125,6 +126,12 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   }
 
   return tau_d_array;
+}
+
+Vector6d ImpedanceRegulationControlLaw::get_task_f()
+{
+  const std::lock_guard<std::mutex> lock_f_task(f_task_mutex_);
+  return f_task_;
 }
 
 }  // namespace articulated_franka

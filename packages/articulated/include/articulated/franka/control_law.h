@@ -19,6 +19,8 @@
 
 namespace articulated_franka {
 
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+
 class FrankaControlLaw {
   public:
     virtual std::array<double, 7> compute(
@@ -43,13 +45,16 @@ class ImpedanceRegulationControlLaw: public FrankaControlLaw {
       double ee_control_force_bound,
       double ee_control_torque_bound
     );
+    Vector6d get_task_f();
+
   private:
     Eigen::Matrix<double, 6, 6> stiffness_, damping_;
     Eigen::Vector3d position_d_;
     Eigen::Quaterniond orientation_d_;
     double ee_control_force_bound_, ee_control_torque_bound_;
-    std::mutex config_mutex_;
+    std::mutex config_mutex_, f_task_mutex_;
     realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
+    Vector6d f_task_;
 };
 
 }  // namespace artculated_franka
