@@ -5,5 +5,3 @@ float64 rotational_stiffness
 float64 ee_control_force_bound
 # max absolute value of operational space control torque
 float64 ee_control_torque_bound
----
-string status

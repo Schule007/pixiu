@@ -46,8 +46,11 @@ void ArticulatedFranka::start_torque_control(std::shared_ptr<FrankaControlLaw> p
     return cmd;
   };
   status_ = running;
+  ROS_INFO("Changed status to running. Entering control loop.");
   robot_->control(f);
+  ROS_INFO("Exited control loop. Changing status to idle.");
   status_ = idle;
+  ROS_INFO("Changed status to idle.");
 }
 
 void ArticulatedFranka::stop()
@@ -74,6 +77,7 @@ void ArticulatedFranka::set_default_behavior_() {
                                 {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
                                 {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
                                 {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
+    has_set_default_behavior_ = true;
   }
 }
 

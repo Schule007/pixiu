@@ -58,15 +58,16 @@ catkin_python_setup()
 add_message_files(
   FILES
   ImpedanceRegulationState.msg
+  ImpedanceRegulationControlConfig.msg
   ReducedFrankaState.msg
 )
 
 add_service_files(
   FILES
   GetEeTransform.srv
-  RegulateEeTransform.srv
   WordWord.srv
   FrankaGripperCommand.srv
+  SetRegulateEeConfig.srv
 )
 
 add_action_files(

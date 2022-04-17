@@ -25,6 +25,9 @@ FrankaRosHandler::FrankaRosHandler(
   grasp_service_ = nh.advertiseService(
     prefix + "gripper_command", &FrankaRosHandler::gripper_command_cb, this
   );
+  config_service_ = nh.advertiseService(
+    prefix + "set_regulate_ee_config", &FrankaRosHandler::set_regulate_ee_config_cb, this
+  );
 }
 
 bool FrankaRosHandler::get_ee_transform_cb(
@@ -40,25 +43,40 @@ bool FrankaRosHandler::get_ee_transform_cb(
   return true;
 }
 
+void FrankaRosHandler::config_impedance_regulation_(
+  articulated::ImpedanceRegulationControlConfig config
+) {
+  Eigen::Matrix4d desired_transform;
+  for (size_t r = 0; r < 4; ++r) {
+    for (size_t c = 0; c < 4; ++c) {
+      // goal.o_T_ee_desired is row major
+      desired_transform(r, c) = config.o_T_ee_desired[r * 4 + c];
+    }
+  }
+  p_impedance_law_->config(
+    desired_transform,
+    config.translational_stiffness,
+    config.rotational_stiffness,
+    config.ee_control_force_bound,
+    config.ee_control_torque_bound
+  );
+}
+
+bool FrankaRosHandler::set_regulate_ee_config_cb(
+  articulated::SetRegulateEeConfig::Request &req,
+  articulated::SetRegulateEeConfig::Response &res
+) {
+  if (p_franka_->get_status() != running) return false;
+  config_impedance_regulation_(req.config);
+  return true;
+}
+
 void FrankaRosHandler::regulate_ee_transform_cb(
   const articulated::RegulateEeTransformGoalConstPtr& goal
 ) {
   articulated::RegulateEeTransformResult result;
   try {
-    Eigen::Matrix4d desired_transform;
-    for (size_t r = 0; r < 4; ++r) {
-      for (size_t c = 0; c < 4; ++c) {
-        // goal.o_T_ee_desired is row major
-        desired_transform(r, c) = goal->o_T_ee_desired[r * 4 + c];
-      }
-    }
-    p_impedance_law_->config(
-      desired_transform,
-      goal->translational_stiffness,
-      goal->rotational_stiffness,
-      goal->ee_control_force_bound,
-      goal->ee_control_torque_bound
-    );
+    config_impedance_regulation_(goal->config);
     p_franka_->start_torque_control(p_impedance_law_);
     if (impedance_regulation_server_.isPreemptRequested() || !ros::ok()) {
       result.status = "regulation-preempted";
@@ -71,12 +89,12 @@ void FrankaRosHandler::regulate_ee_transform_cb(
   }
   catch (const franka::Exception& ex) {
     ROS_WARN("Exception during control loop %s", ex.what());
-    result.status =ex.what();
+    result.status = ex.what();
     impedance_regulation_server_.setAborted(result);
   }
   catch (const std::runtime_error& ex) {
     ROS_WARN("Exception before control loop started %s", ex.what());
-    result.status =ex.what();
+    result.status = ex.what();
     impedance_regulation_server_.setAborted(result);
   }
 }
