@@ -34,27 +34,26 @@ void ImpedanceRegulationControlLaw::config(
   double ee_control_force_bound,
   double ee_control_torque_bound
 ) {
-  // Block if configuration is already going on
-  const std::lock_guard<std::mutex> lock(config_mutex_);
-  // Block if previous configuration is finished but active buffer is not
-  // updated yet.
+  int to_config_idx = 1 - current_config_idx_;
   Eigen::Affine3d desired_transform(o_T_ee_desired);
-  position_d_ = desired_transform.translation();
-  orientation_d_ = desired_transform.linear();
+  configs_.at(to_config_idx).position_d_ = desired_transform.translation();
+  configs_.at(to_config_idx).orientation_d_ = desired_transform.linear();
 
-  ee_control_force_bound_ = ee_control_force_bound;
-  ee_control_torque_bound_ = ee_control_torque_bound;
-  stiffness_.setZero();
-  stiffness_.topLeftCorner(3, 3) <<
+  configs_.at(to_config_idx).ee_control_force_bound_ = ee_control_force_bound;
+  configs_.at(to_config_idx).ee_control_torque_bound_ = ee_control_torque_bound;
+  configs_.at(to_config_idx).stiffness_.setZero();
+  configs_.at(to_config_idx).stiffness_.topLeftCorner(3, 3) <<
     translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  stiffness_.bottomRightCorner(3, 3) <<
+  configs_.at(to_config_idx).stiffness_.bottomRightCorner(3, 3) <<
     rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  damping_.setZero();
-  damping_.topLeftCorner(3, 3) <<
+  configs_.at(to_config_idx).damping_.setZero();
+  configs_.at(to_config_idx).damping_.topLeftCorner(3, 3) <<
     2.5 * sqrt(translational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
-  damping_.bottomRightCorner(3, 3) <<
+  configs_.at(to_config_idx).damping_.bottomRightCorner(3, 3) <<
     2.5 * sqrt(rotational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
   // Switch the parameter buffer if the robot is running
+  const std::lock_guard<std::mutex> lock(config_mutex_);
+  current_config_idx_ = to_config_idx;
 }
 
 std::array<double, 7> ImpedanceRegulationControlLaw::compute(
@@ -76,28 +75,32 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   // compute error to desired equilibrium pose
   // position error
   Eigen::Matrix<double, 6, 1> error;
-  error.head(3) << position - position_d_;
+  error.head(3) << position - configs_.at(current_config_idx_).position_d_;
   // orientation error
-  if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
+  if (configs_.at(current_config_idx_).orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
     orientation.coeffs() << -orientation.coeffs();
   }
   // "difference" quaternion
-  Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
+  Eigen::Quaterniond error_quaternion(orientation.inverse() * configs_.at(current_config_idx_).orientation_d_);
   error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   error.tail(3) << -transform.linear() * error.tail(3);
   // compute control
   Eigen::VectorXd tau_task(7), tau_d(7);
   const std::lock_guard<std::mutex> lock_f_task(f_task_mutex_);
-  f_task_ << -stiffness_ * error - damping_ * (jacobian * dq);
+  f_task_ << -configs_.at(current_config_idx_).stiffness_ * error - configs_.at(current_config_idx_).damping_ * (jacobian * dq);
   for (size_t i = 0; i < 3; ++i) {
     f_task_(i) = clamp(
-      f_task_(i), -ee_control_force_bound_, ee_control_force_bound_
+      f_task_(i),
+      -configs_.at(current_config_idx_).ee_control_force_bound_,
+      configs_.at(current_config_idx_).ee_control_force_bound_
     );
   }
   for (size_t i = 3; i < 6; ++i) {
     f_task_(i) = clamp(
-      f_task_(i), -ee_control_torque_bound_, ee_control_torque_bound_
+      f_task_(i),
+      -configs_.at(current_config_idx_).ee_control_torque_bound_,
+      configs_.at(current_config_idx_).ee_control_torque_bound_
     );
   }
   tau_task << jacobian.transpose() * f_task_;

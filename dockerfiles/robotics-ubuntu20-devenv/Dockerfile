@@ -124,8 +124,12 @@ export PYTHONPATH=/opt/openrobots/lib/python3.8/site-packages:$PYTHONPATH\n\
 export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH\n\
 \n\
 rossetup () {\n\
+    if [ -z "$ROS_SETUP_DONE" ]; then\n\
+        PS1="(ROS)$PS1"\n\
+    fi\n\
     source /opt/ros/noetic/setup.bash\n\
     [ -f "$HOME/catkin_ws/devel/setup.bash" ] && source "$HOME/catkin_ws/devel/setup.bash"\n\
+    export ROS_SETUP_DONE=1\n\
 }' >> ${home}/.bashrc
 ############ Entrypoint ###############
 ENV HOME=${home}

@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <array>
 #include <Eigen/Dense>
 #include <franka/control_types.h>
 #include <franka/duration.h>
@@ -30,6 +31,13 @@ class FrankaControlLaw {
     ) = 0;
 };
 
+struct ImpedanceRegulationControlLawConfig {
+  Eigen::Matrix<double, 6, 6> stiffness_, damping_;
+  Eigen::Vector3d position_d_;
+  Eigen::Quaterniond orientation_d_;
+  double ee_control_force_bound_, ee_control_torque_bound_;
+};
+
 class ImpedanceRegulationControlLaw: public FrankaControlLaw {
   public:
     ImpedanceRegulationControlLaw(std::string ros_msg_prefix);
@@ -48,10 +56,8 @@ class ImpedanceRegulationControlLaw: public FrankaControlLaw {
     Vector6d get_task_f();
 
   private:
-    Eigen::Matrix<double, 6, 6> stiffness_, damping_;
-    Eigen::Vector3d position_d_;
-    Eigen::Quaterniond orientation_d_;
-    double ee_control_force_bound_, ee_control_torque_bound_;
+    int current_config_idx_ = 0;
+    std::array<ImpedanceRegulationControlLawConfig, 2> configs_;
     std::mutex config_mutex_, f_task_mutex_;
     realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
     Vector6d f_task_;
