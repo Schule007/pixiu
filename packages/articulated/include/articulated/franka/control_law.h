@@ -48,8 +48,8 @@ class ImpedanceRegulationControlLaw: public FrankaControlLaw {
     ) override;
     void config(
       Eigen::Matrix4d o_T_ee_desired,
-      double translational_stiffness,
-      double rotational_stiffness,
+      std::array<double, 6> stiffness,
+      std::array<double, 6> damping,
       double ee_control_force_bound,
       double ee_control_torque_bound
     );

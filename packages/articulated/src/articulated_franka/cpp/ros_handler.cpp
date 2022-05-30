@@ -53,10 +53,15 @@ void FrankaRosHandler::config_impedance_regulation_(
       desired_transform(r, c) = config.o_T_ee_desired[r * 4 + c];
     }
   }
+  std::array<double, 6> stiffness, damping;
+  for (size_t i = 0; i < 6; ++i) {
+    stiffness[i] = config.stiffness[i];
+    damping[i] = config.damping[i];
+  }
   p_impedance_law_->config(
     desired_transform,
-    config.translational_stiffness,
-    config.rotational_stiffness,
+    stiffness,
+    damping,
     config.ee_control_force_bound,
     config.ee_control_torque_bound
   );

@@ -29,8 +29,8 @@ ImpedanceRegulationControlLaw::ImpedanceRegulationControlLaw (std::string ros_ms
  * */
 void ImpedanceRegulationControlLaw::config(
   Eigen::Matrix4d o_T_ee_desired,
-  double translational_stiffness,
-  double rotational_stiffness,
+  std::array<double, 6> stiffness,
+  std::array<double, 6> damping,
   double ee_control_force_bound,
   double ee_control_torque_bound
 ) {
@@ -41,16 +41,13 @@ void ImpedanceRegulationControlLaw::config(
 
   configs_.at(to_config_idx).ee_control_force_bound_ = ee_control_force_bound;
   configs_.at(to_config_idx).ee_control_torque_bound_ = ee_control_torque_bound;
+
   configs_.at(to_config_idx).stiffness_.setZero();
-  configs_.at(to_config_idx).stiffness_.topLeftCorner(3, 3) <<
-    translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
-  configs_.at(to_config_idx).stiffness_.bottomRightCorner(3, 3) <<
-    rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   configs_.at(to_config_idx).damping_.setZero();
-  configs_.at(to_config_idx).damping_.topLeftCorner(3, 3) <<
-    2.5 * sqrt(translational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
-  configs_.at(to_config_idx).damping_.bottomRightCorner(3, 3) <<
-    2.5 * sqrt(rotational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
+  for (size_t i = 0; i < 6; ++i) {
+    configs_.at(to_config_idx).stiffness_(i, i) = stiffness[i];
+    configs_.at(to_config_idx).damping_(i, i) = damping[i];
+  }
   // Switch the parameter buffer if the robot is running
   const std::lock_guard<std::mutex> lock(config_mutex_);
   current_config_idx_ = to_config_idx;
