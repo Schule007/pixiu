@@ -63,7 +63,7 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   std::array<double, 42> jacobian_array = p_model->zeroJacobian(franka::Frame::kEndEffector, robot_state);
   // convert to Eigen
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-  Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+  Eigen::Map<const Eigen::MatrixXd> jacobian(jacobian_array.data(), 6, 7);
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
@@ -83,7 +83,7 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   // Transform to base frame
   error.tail(3) << -transform.linear() * error.tail(3);
   // compute control
-  Eigen::VectorXd tau_task(7), tau_d(7);
+  Eigen::VectorXd tau_task(7), tau_null(7), tau_d(7);
   const std::lock_guard<std::mutex> lock_f_task(f_task_mutex_);
   f_task_ << -configs_.at(current_config_idx_).stiffness_ * error - configs_.at(current_config_idx_).damping_ * (jacobian * dq);
   for (size_t i = 0; i < 3; ++i) {
@@ -101,6 +101,12 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
     );
   }
   tau_task << jacobian.transpose() * f_task_;
+
+  Eigen::MatrixXd task_orthogonal_projector = jacobian.completeOrthogonalDecomposition().pseudoInverse() * jacobian;
+  Eigen::MatrixXd null_orthogonal_projector = Eigen::Matrix<double, 7, 7>::Identity() - task_orthogonal_projector;
+  tau_null << - null_orthogonal_projector * dq;
+
+  // tau_d << tau_task + tau_null + coriolis;
   tau_d << tau_task + coriolis;
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;

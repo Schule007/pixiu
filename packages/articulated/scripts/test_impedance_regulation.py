@@ -17,8 +17,8 @@ def main():
     robot.regulate_ee(
         T,
         ee_control_force_bound=7,
-        k_translation=150,
-        k_rotation=10,
+        stiffness=[150, 150, 150, 10, 10, 10],
+        damping=[30, 30, 30, 8, 8, 8],
     )
 
     input("Enter to stop")

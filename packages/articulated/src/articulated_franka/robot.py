@@ -1,6 +1,7 @@
 """A thin wrapper of ROS clients."""
 import time
 import logging
+from typing import Optional, Sequence
 
 import numpy as np
 import rospy
@@ -43,24 +44,28 @@ class ImpedanceRegulation:
     def set_ee(
         self,
         target_transform,
-        k_translation=150.0,
-        k_rotation=10.0,
+        stiffness=None,
+        damping=None,
         ee_control_force_bound=50,
         ee_control_torque_bound=4,
     ):
         req = articulated.srv.SetRegulateEeConfigRequest()
         req.config.o_T_ee_desired = target_transform.flatten().tolist()
-        req.config.translational_stiffness = k_translation
-        req.config.rotational_stiffness = k_rotation
-        req.config.ee_control_force_bound = ee_control_force_bound
-        req.config.ee_control_torque_bound = ee_control_torque_bound
+        self._fill_in_config(
+            req.config,
+            target_transform,
+            stiffness,
+            damping,
+            ee_control_force_bound,
+            ee_control_torque_bound,
+        )
         self._c_config.call(req)
 
     def regulate_ee(
         self,
         target_transform,
-        k_translation=150.0,
-        k_rotation=10.0,
+        stiffness=None,
+        damping=None,
         ee_control_force_bound=50,
         ee_control_torque_bound=4,
     ) -> None:
@@ -68,11 +73,14 @@ class ImpedanceRegulation:
         if not self._c_regulate_ee.wait_for_server(rospy.Duration(3)):
             raise RuntimeError("Action server connection time out!")
         goal = articulated.msg.RegulateEeTransformGoal()
-        goal.config.o_T_ee_desired = target_transform.flatten().tolist()
-        goal.config.translational_stiffness = k_translation
-        goal.config.rotational_stiffness = k_rotation
-        goal.config.ee_control_force_bound = ee_control_force_bound
-        goal.config.ee_control_torque_bound = ee_control_torque_bound
+        self._fill_in_config(
+            goal.config,
+            target_transform,
+            stiffness,
+            damping,
+            ee_control_force_bound,
+            ee_control_torque_bound,
+        )
         self._c_regulate_ee.send_goal(goal)
         state = self._c_regulate_ee.get_state()
         t0 = time.time()
@@ -85,6 +93,27 @@ class ImpedanceRegulation:
         if state == GoalStatus.ABORTED:
             result = self._c_regulate_ee.get_result()
             raise RuntimeError("Goal aborted! %s" % result.status)
+
+    @staticmethod
+    def _fill_in_config(
+        config,
+        target_transform,
+        stiffness: Optional[Sequence],
+        damping: Optional[Sequence],
+        ee_control_force_bound: float,
+        ee_control_torque_bound: float,
+    ):
+        if stiffness is not None:
+            assert len(stiffness) == 6, "Stiffness dimension does not match"
+            stiffness = [150, 150, 150, 10, 10, 10]
+        if damping is not None:
+            assert len(stiffness) == 6, "Damping dimension does not match"
+            damping = [30, 30, 30, 8, 8, 8]
+        config.o_T_ee_desired = target_transform.flatten().tolist()
+        config.stiffness = np.array(stiffness)
+        config.damping = np.array(damping)
+        config.ee_control_force_bound = ee_control_force_bound
+        config.ee_control_torque_bound = ee_control_torque_bound
 
     def stop(self):
         if self.is_idle():
