@@ -11,15 +11,18 @@
 #include <franka/model.h>
 #include <franka/robot.h>
 #include <franka/gripper.h>
+#include <map>
 #include <time.h>
 #include <string>
 #include <functional>
+#include <stdexcept>
 #include <memory>
 
 #include "ros/ros.h"
 #include "ros/console.h"
 #include "std_msgs/String.h"
 #include "articulated/ImpedanceRegulationState.h"
+#include <articulated/franka/control_law.h>
 #include <realtime_tools/realtime_publisher.h>
 
 namespace articulated_franka {
@@ -36,28 +39,15 @@ class ArticulatedFranka {
     );
     Eigen::Matrix<double, 7, 1, Eigen::ColMajor> get_joint_position();
     Eigen::Matrix4d get_o_T_ee();
-    void regulate_o_T_ee(
-      Eigen::Matrix4d o_T_ee_desired,
-      double translational_stiffness,
-      double rotational_stiffness,
-      double ee_control_force_bound,
-      double ee_control_torque_bound
-    );
     Status get_status();
     void stop();
+    void start_torque_control(std::shared_ptr<FrankaControlLaw> p_control_law);
   private:
     std::shared_ptr<franka::Robot> robot_;
     std::shared_ptr<franka::Model> model_;
-    Eigen::Matrix<double, 6, 6> stiffness_, damping_;
     Status status_{idle};
-    Eigen::Vector3d position_d_;
-    Eigen::Quaterniond orientation_d_;
-    franka::Torques impedance_regulation_cb(const franka::RobotState&, franka::Duration);
-    double time_since_{0.0},
-           ee_control_force_bound_{100},
-           ee_control_torque_bound_{100};
-    realtime_tools::RealtimePublisher<articulated::ImpedanceRegulationState> pub_;
     bool has_set_default_behavior_{false};
+    void set_default_behavior_();
 };
 
 }  // namespace articulated_franka
