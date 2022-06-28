@@ -10,7 +10,6 @@
 #include <articulated/franka/articulated_franka.h>
 #include <articulated/GetEeTransform.h>
 #include <articulated/SetRegulateEeConfig.h>
-#include <articulated/RegulateEeTransform.h>
 #include <articulated/WordWord.h>
 #include <articulated/FrankaGripperCommand.h>
 #include <articulated/RegulateEeTransformAction.h>
