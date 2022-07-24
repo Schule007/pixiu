@@ -22,6 +22,7 @@ int main(int argc, char **argv)
   auto p_impedance_law = std::make_shared<af::ImpedanceRegulationControlLaw>(service_prefix);
   af::FrankaRosHandler service_handler(service_prefix, n, p_franka, p_gripper, p_impedance_law);
   spinner.start();
+  ROS_INFO("Franka server ready!");
   ros::waitForShutdown();
 
   return 0;

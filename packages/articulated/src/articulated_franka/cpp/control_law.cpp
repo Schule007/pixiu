@@ -63,7 +63,7 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   std::array<double, 42> jacobian_array = p_model->zeroJacobian(franka::Frame::kEndEffector, robot_state);
   // convert to Eigen
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-  Eigen::Map<const Eigen::MatrixXd> jacobian(jacobian_array.data(), 6, 7);
+  Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
@@ -102,9 +102,19 @@ std::array<double, 7> ImpedanceRegulationControlLaw::compute(
   }
   tau_task << jacobian.transpose() * f_task_;
 
-  Eigen::MatrixXd task_orthogonal_projector = jacobian.completeOrthogonalDecomposition().pseudoInverse() * jacobian;
-  Eigen::MatrixXd null_orthogonal_projector = Eigen::Matrix<double, 7, 7>::Identity() - task_orthogonal_projector;
-  tau_null << - null_orthogonal_projector * dq;
+  ///////// TODO: optimize speed. Too slow to meet 1000Hz control rate.
+  // Eigen::JacobiSVD<Eigen::MatrixXd> jacobian_svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  // double pinv_tolerance = std::numeric_limits<double>::epsilon()
+  //   * std::max(jacobian.cols(), jacobian.rows())
+  //   * jacobian_svd.singularValues().array().abs()(0);
+  // Eigen::Matrix<double, 7, 6> jacobian_pinv = jacobian_svd.matrixV() * (
+  //   jacobian_svd.singularValues().array().abs() > pinv_tolerance
+  // ).select(
+  //   jacobian_svd.singularValues().array().inverse(), 0
+  // ).matrix().asDiagonal() * jacobian_svd.matrixU().adjoint();;
+  // Eigen::Matrix<double, 7, 7> task_orthogonal_projector = jacobian_pinv * jacobian;
+  // Eigen::Matrix<double, 7, 7> null_orthogonal_projector = Eigen::Matrix<double, 7, 7>::Identity() - task_orthogonal_projector;
+  // tau_null << - null_orthogonal_projector * dq;
 
   // tau_d << tau_task + tau_null + coriolis;
   tau_d << tau_task + coriolis;
