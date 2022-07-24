@@ -36,6 +36,9 @@ docker run -d\
        linfenglee/robotics-ubuntu18-devenv:latest sleep infinity
 ```
 
+Might need to have `--device /dev/bus/usb:/dev/bus/usb` for kinect
+([docker libfreenect2](https://hub.docker.com/r/nucleardreamer/libfreenect2/))
+
 macOS
 ``` fish
 docker run -d\
