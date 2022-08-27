@@ -41,6 +41,9 @@ ENV HOME ${home}
 RUN sudo apt-get update && sudo apt-get install -qqy --no-install-recommends\
     ros-melodic-ros-control ros-melodic-ros-controllers
 
+### ROS
+RUN sudo apt-get install ros-melodic-ros-numpy
+
 ### iai-kinect2
 
 # libfreenect2
@@ -54,6 +57,13 @@ RUN cd ${home}/from_src/libfreenect2\
     && make -j$(nproc) && sudo make install\
     && sudo cp ../platform/linux/udev/90-kinect2.rules /etc/udev/rules.d/
 
+### Kinova
+# ros_kortex_vision
+RUN sudo apt-get install gstreamer1.0-tools gstreamer1.0-libav\
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev\
+    libgstreamer-plugins-good1.0-dev gstreamer1.0-plugins-good\
+    gstreamer1.0-plugins-base
+RUN sudo apt-get install ros-melodic-rgbd-launch
 
 #################### Development tools ######################
 
