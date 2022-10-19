@@ -41,6 +41,30 @@ ENV HOME ${home}
 RUN sudo apt-get update && sudo apt-get install -qqy --no-install-recommends\
     ros-melodic-ros-control ros-melodic-ros-controllers
 
+### ROS
+RUN sudo apt-get install ros-melodic-ros-numpy
+
+### iai-kinect2
+
+# libfreenect2
+RUN git clone --recursive https://github.com/OpenKinect/libfreenect2.git ${home}/from_src/libfreenect2
+RUN cd ${home}/from_src/libfreenect2\
+    && sudo apt-get install -y --no-install-recommends\
+    build-essential cmake pkg-config\
+    libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev\
+    && mkdir build && cd build\
+    && cmake .. -DCMAKE_INSTALL_PREFIX=/usr\
+    && make -j$(nproc) && sudo make install\
+    && sudo cp ../platform/linux/udev/90-kinect2.rules /etc/udev/rules.d/
+
+### Kinova
+# ros_kortex_vision
+RUN sudo apt-get install gstreamer1.0-tools gstreamer1.0-libav\
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev\
+    libgstreamer-plugins-good1.0-dev gstreamer1.0-plugins-good\
+    gstreamer1.0-plugins-base
+RUN sudo apt-get install ros-melodic-rgbd-launch
+
 #################### Development tools ######################
 
 # install emacs
@@ -55,6 +79,16 @@ RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && ~/.fzf/ins
 # C++
 # RUN sudo apt-get install -y --no-install-recommends clangd-12 \
 #   && sudo update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-12 100
+
+# conan
+RUN sudo apt-get install -y --no-install-recommends python3 python3-pip python3-setuptools \
+    && sudo python3 -m pip install conan
+# RUN curl -LO https://github.com/conan-io/conan/releases/latest/download/conan-ubuntu-64.deb\
+#     && sudo dpkg -i conan-ubuntu-64.deb\
+#     && rm conan-ubuntu-64.deb
+RUN conan config set general.revisions_enabled=1\
+    && conan profile new default --detect > /dev/null\
+    && conan profile update settings.compiler.libcxx=libstdc++11 default
 
 # install ripgrep (rg)
 RUN curl -LO https://github.com/BurntSushi/ripgrep/releases/download/11.0.2/ripgrep_11.0.2_amd64.deb\
